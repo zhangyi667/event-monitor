@@ -1,5 +1,6 @@
 package com.web3.eventmonitor.service;
 
+import com.web3.eventmonitor.model.dto.TransferEventDTO;
 import com.web3.eventmonitor.model.entity.TransferEvent;
 import com.web3.eventmonitor.repository.TransferEventRepository;
 import io.micrometer.core.instrument.Counter;
@@ -42,6 +43,7 @@ public class EventListenerService {
 
     private final Web3j web3j;
     private final TransferEventRepository repository;
+    private final EventBroadcastService broadcastService;
 
     // Metrics
     private final Counter eventsCapturedCounter;
@@ -172,13 +174,17 @@ public class EventListenerService {
                 .blockTimestamp(blockTimestamp)
                 .build();
 
-                repository.save(event);
+                TransferEvent savedEvent = repository.save(event);
 
                 // Increment successful save metric
                 eventsSavedCounter.increment();
 
                 log.info("Saved Transfer event - From: {}, To: {}, Value: {}, TxHash: {}",
                     fromAddress, toAddress, value, ethLog.getTransactionHash());
+
+                // Broadcast to SSE clients
+                TransferEventDTO dto = TransferEventDTO.fromEntity(savedEvent);
+                broadcastService.broadcast(dto);
 
             } catch (Exception e) {
                 // Increment error counter

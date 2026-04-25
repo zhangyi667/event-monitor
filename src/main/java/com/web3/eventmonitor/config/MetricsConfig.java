@@ -91,4 +91,36 @@ public class MetricsConfig {
             .register(registry);
         return blockNumber;
     }
+
+    /**
+     * Gauge for number of active SSE connections.
+     */
+    @Bean
+    public AtomicLong sseActiveConnections(MeterRegistry registry) {
+        AtomicLong connections = new AtomicLong(0);
+        Gauge.builder("sse.connections.active", connections, AtomicLong::get)
+            .description("Number of active SSE connections")
+            .register(registry);
+        return connections;
+    }
+
+    /**
+     * Counter for total events streamed via SSE.
+     */
+    @Bean
+    public Counter sseEventsStreamed(MeterRegistry registry) {
+        return Counter.builder("sse.events.streamed.total")
+            .description("Total number of events streamed via SSE")
+            .register(registry);
+    }
+
+    /**
+     * Counter for total SSE connections established.
+     */
+    @Bean
+    public Counter sseConnectionsTotal(MeterRegistry registry) {
+        return Counter.builder("sse.connections.total")
+            .description("Total number of SSE connections established")
+            .register(registry);
+    }
 }

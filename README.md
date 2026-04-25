@@ -7,6 +7,7 @@ A Java-based application that monitors Ethereum blockchain events in real-time, 
 - 🔗 **Real-time Event Monitoring**: Listens to ERC20 Transfer events via WebSocket
 - 💾 **Persistent Storage**: Stores events in PostgreSQL with optimized indexes
 - 🚀 **REST API**: Query events with pagination, filtering, and sorting
+- ⚡ **SSE Streaming**: Real-time event streaming to web clients via Server-Sent Events
 - 🐳 **Kubernetes-Ready**: Production-ready K8s manifests with health checks
 - 📊 **Statistics**: Aggregate metrics about stored events
 - 🔍 **OpenAPI/Swagger**: Interactive API documentation
@@ -43,9 +44,11 @@ event-monitor/
 │   │   └── TransferEventRepository.java
 │   ├── service/
 │   │   ├── EventListenerService.java  # Event monitoring
-│   │   └── EventQueryService.java     # Business logic
+│   │   ├── EventQueryService.java     # Business logic
+│   │   └── EventBroadcastService.java # SSE broadcasting
 │   └── controller/
 │       ├── EventController.java       # REST endpoints
+│       ├── EventStreamController.java # SSE endpoints
 │       └── HealthController.java      # Health checks
 ├── src/main/resources/
 │   ├── application.yml                 # Configuration
@@ -159,6 +162,14 @@ java -jar build/libs/event-monitor-0.0.1-SNAPSHOT.jar
 | GET | `/api/events/blocks?startBlock={n}&endBlock={m}` | Get events by block range |
 | GET | `/api/events/stats` | Get event statistics |
 
+### Real-Time Event Streaming (SSE)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/events/stream` | Stream all blockchain events in real-time |
+| GET | `/api/events/stream/address/{address}` | Stream events for specific address (from OR to) |
+| GET | `/api/events/stream/contract/{contractAddress}` | Stream events from specific contract |
+
 ### Health
 
 | Method | Endpoint | Description |
@@ -189,6 +200,118 @@ curl http://localhost:8080/api/events/stats
 
 # Health check
 curl http://localhost:8080/health/ready
+```
+
+## Real-Time Event Streaming
+
+The application supports Server-Sent Events (SSE) for real-time streaming of blockchain events as they are captured.
+
+### Why SSE?
+
+- **Real-time Updates**: Receive events instantly without polling the REST API
+- **Efficient**: Reduces server load compared to repeated HTTP requests
+- **Simple**: Built on standard HTTP, works through firewalls and proxies
+- **Browser Native**: EventSource API built into modern browsers
+- **Auto-Reconnection**: Browsers automatically reconnect on connection loss
+
+### SSE Endpoints
+
+**Stream all events:**
+```bash
+curl -N http://localhost:8080/api/events/stream
+```
+
+**Stream events for a specific address:**
+```bash
+curl -N http://localhost:8080/api/events/stream/address/0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+```
+
+**Stream events from a specific contract:**
+```bash
+curl -N http://localhost:8080/api/events/stream/contract/0x1234567890123456789012345678901234567890
+```
+
+**Note:** The `-N` flag disables buffering in curl for immediate output.
+
+### JavaScript Example
+
+```javascript
+// Connect to event stream
+const eventSource = new EventSource('http://localhost:8080/api/events/stream');
+
+// Listen for connection confirmation
+eventSource.addEventListener('connected', (event) => {
+  const data = JSON.parse(event.data);
+  console.log('Connected to stream:', data);
+});
+
+// Listen for transfer events
+eventSource.addEventListener('transfer', (event) => {
+  const transferEvent = JSON.parse(event.data);
+  console.log('New blockchain event:', transferEvent);
+
+  // Update UI with real-time data
+  displayEvent(transferEvent);
+});
+
+// Handle errors
+eventSource.onerror = (error) => {
+  console.error('SSE error:', error);
+  // EventSource will automatically attempt to reconnect
+};
+
+// Close connection when done (optional)
+// eventSource.close();
+```
+
+### Python Example
+
+```python
+import requests
+import json
+
+# Stream events
+url = 'http://localhost:8080/api/events/stream'
+with requests.get(url, stream=True) as response:
+    for line in response.iter_lines():
+        if line:
+            decoded = line.decode('utf-8')
+            if decoded.startswith('data:'):
+                data = json.loads(decoded[5:])  # Remove 'data:' prefix
+                print(f"New event: {data}")
+```
+
+### Connection Details
+
+- **Timeout**: 30 minutes (configurable)
+- **Heartbeat**: Every 15 seconds to keep connection alive
+- **Format**: Server-Sent Events (text/event-stream)
+- **Events**:
+  - `connected` - Connection established confirmation
+  - `transfer` - Blockchain transfer event
+  - `:heartbeat` - Keep-alive comment
+
+### Use Cases
+
+1. **Real-time Dashboards**: Display live blockchain activity
+2. **Monitoring Tools**: Track specific addresses or contracts in real-time
+3. **Alerting Systems**: Trigger actions based on specific events
+4. **Analytics**: Collect real-time metrics and statistics
+5. **Audit Logs**: Monitor compliance-related transfers instantly
+
+### Monitoring SSE Connections
+
+Check SSE metrics via Prometheus:
+
+```bash
+# Number of active SSE connections
+curl http://localhost:8080/actuator/prometheus | grep sse_connections_active
+
+# Total SSE connections established
+curl http://localhost:8080/actuator/prometheus | grep sse_connections_total
+
+# Total events streamed
+curl http://localhost:8080/actuator/prometheus | grep sse_events_streamed_total
 ```
 
 ## Kubernetes Deployment
@@ -338,6 +461,9 @@ The application includes production-grade monitoring with Prometheus and custom 
 | `events_processing_duration_seconds` | Timer | Event processing time (histogram) |
 | `web3j_connection_status` | Gauge | WebSocket connection status (0=down, 1=up) |
 | `blockchain_current_block` | Gauge | Current blockchain block number |
+| `sse_connections_active` | Gauge | Number of active SSE connections |
+| `sse_connections_total` | Counter | Total SSE connections established |
+| `sse_events_streamed_total` | Counter | Total events streamed via SSE |
 
 ### Deploy Prometheus
 
@@ -516,7 +642,7 @@ Use Spring Boot DevTools for hot reload during development (already included in 
 ## Next Steps (Post-MVP)
 
 - [ ] Add support for multiple contracts
-- [ ] Implement WebSocket streaming for real-time updates
+- [x] Implement SSE streaming for real-time updates ✅
 - [ ] Add Kafka for event processing pipeline
 - [ ] Implement data aggregation and analytics
 - [x] Add Prometheus metrics and Grafana dashboards ✅
