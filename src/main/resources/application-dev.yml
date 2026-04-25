@@ -1,0 +1,8 @@
+spring:
+  jpa:
+    show-sql: true
+
+logging:
+  level:
+    com.web3.eventmonitor: DEBUG
+    org.web3j: DEBUG

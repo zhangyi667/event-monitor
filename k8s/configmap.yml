@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: event-monitor-config
+  namespace: event-monitor
+data:
+  # Database configuration
+  database.url: "jdbc:postgresql://postgres-service:5432/eventmonitor"
+  database.user: "postgres"
+
+  # Application configuration
+  spring.profiles.active: "prod"
+
+  # Logging
+  logging.level.root: "INFO"
+  logging.level.com.web3.eventmonitor: "INFO"

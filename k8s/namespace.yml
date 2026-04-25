@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: event-monitor
+  labels:
+    name: event-monitor
+    app: event-monitor
