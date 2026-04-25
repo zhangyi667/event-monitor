@@ -2,6 +2,8 @@ package com.web3.eventmonitor.service;
 
 import com.web3.eventmonitor.model.entity.TransferEvent;
 import com.web3.eventmonitor.repository.TransferEventRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Timer;
 import io.reactivex.disposables.Disposable;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -10,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
+
+import java.util.concurrent.atomic.AtomicLong;
 import org.web3j.abi.EventEncoder;
 import org.web3j.abi.TypeReference;
 import org.web3j.abi.datatypes.Address;
@@ -38,6 +42,15 @@ public class EventListenerService {
 
     private final Web3j web3j;
     private final TransferEventRepository repository;
+
+    // Metrics
+    private final Counter eventsCapturedCounter;
+    private final Counter eventsSavedCounter;
+    private final Counter duplicateEventsCounter;
+    private final Counter processingErrorsCounter;
+    private final Timer eventProcessingTimer;
+    private final AtomicLong web3jConnectionStatus;
+    private final AtomicLong currentBlockNumber;
 
     @Value("${web3j.contract.address}")
     private String contractAddress;
@@ -96,8 +109,12 @@ public class EventListenerService {
 
             log.info("Successfully subscribed to Transfer events");
 
+            // Update connection status metric
+            web3jConnectionStatus.set(1); // 1 = connected
+
         } catch (Exception e) {
             log.error("Failed to start event listener", e);
+            web3jConnectionStatus.set(0); // 0 = disconnected
             throw new RuntimeException("Failed to start event listener", e);
         }
     }
@@ -109,15 +126,24 @@ public class EventListenerService {
      * @param ethLog The event log from the blockchain
      */
     private void processEvent(Log ethLog) {
-        try {
-            log.debug("Processing event - TxHash: {}, Block: {}",
-                ethLog.getTransactionHash(), ethLog.getBlockNumber());
+        // Track processing time
+        eventProcessingTimer.record(() -> {
+            try {
+                // Increment events captured metric
+                eventsCapturedCounter.increment();
 
-            // Check if already processed (duplicate check)
-            if (repository.existsByTransactionHash(ethLog.getTransactionHash())) {
-                log.debug("Event already processed: {}", ethLog.getTransactionHash());
-                return;
-            }
+                // Update current block number metric
+                currentBlockNumber.set(ethLog.getBlockNumber().longValue());
+
+                log.debug("Processing event - TxHash: {}, Block: {}",
+                    ethLog.getTransactionHash(), ethLog.getBlockNumber());
+
+                // Check if already processed (duplicate check)
+                if (repository.existsByTransactionHash(ethLog.getTransactionHash())) {
+                    log.debug("Event already processed: {}", ethLog.getTransactionHash());
+                    duplicateEventsCounter.increment();
+                    return;
+                }
 
             // Parse event data
             // Topics[0] is the event signature
@@ -146,14 +172,20 @@ public class EventListenerService {
                 .blockTimestamp(blockTimestamp)
                 .build();
 
-            repository.save(event);
+                repository.save(event);
 
-            log.info("Saved Transfer event - From: {}, To: {}, Value: {}, TxHash: {}",
-                fromAddress, toAddress, value, ethLog.getTransactionHash());
+                // Increment successful save metric
+                eventsSavedCounter.increment();
 
-        } catch (Exception e) {
-            log.error("Error processing event: {}", ethLog.getTransactionHash(), e);
-        }
+                log.info("Saved Transfer event - From: {}, To: {}, Value: {}, TxHash: {}",
+                    fromAddress, toAddress, value, ethLog.getTransactionHash());
+
+            } catch (Exception e) {
+                // Increment error counter
+                processingErrorsCounter.increment();
+                log.error("Error processing event: {}", ethLog.getTransactionHash(), e);
+            }
+        });
     }
 
     /**
@@ -205,6 +237,7 @@ public class EventListenerService {
         if (subscription != null && !subscription.isDisposed()) {
             log.info("Stopping event listener...");
             subscription.dispose();
+            web3jConnectionStatus.set(0); // 0 = disconnected
             log.info("Event listener stopped");
         }
     }

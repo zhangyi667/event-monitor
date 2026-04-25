@@ -1,0 +1,188 @@
+{
+  "dashboard": {
+    "title": "Event Monitor - Blockchain Metrics",
+    "tags": ["blockchain", "ethereum", "web3"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Events Captured (Total)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "events_captured_total",
+            "legendFormat": "Events Captured"
+          }
+        ],
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Events Saved (Total)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "events_saved_total",
+            "legendFormat": "Events Saved"
+          }
+        ],
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "Duplicate Events",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "events_duplicates_total",
+            "legendFormat": "Duplicates"
+          }
+        ],
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 4,
+        "title": "Processing Errors",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "events_errors_total",
+            "legendFormat": "Errors"
+          }
+        ],
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        }
+      },
+      {
+        "id": 5,
+        "title": "Events Captured Rate (per minute)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(events_captured_total[1m]) * 60",
+            "legendFormat": "Events/min"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 4
+        }
+      },
+      {
+        "id": 6,
+        "title": "Event Processing Duration (seconds)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(events_processing_duration_seconds_sum[5m]) / rate(events_processing_duration_seconds_count[5m])",
+            "legendFormat": "Avg Duration"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 4
+        }
+      },
+      {
+        "id": 7,
+        "title": "Web3j Connection Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "web3j_connection_status",
+            "legendFormat": "Connection"
+          }
+        ],
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 12
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "text": "Disconnected",
+                    "color": "red"
+                  },
+                  "1": {
+                    "text": "Connected",
+                    "color": "green"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Current Block Number",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "blockchain_current_block",
+            "legendFormat": "Block"
+          }
+        ],
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 12
+        }
+      },
+      {
+        "id": 9,
+        "title": "JVM Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "jvm_memory_used_bytes{area=\"heap\"}",
+            "legendFormat": "Heap Used"
+          },
+          {
+            "expr": "jvm_memory_max_bytes{area=\"heap\"}",
+            "legendFormat": "Heap Max"
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 12
+        }
+      }
+    ],
+    "refresh": "10s",
+    "schemaVersion": 27,
+    "version": 1
+  }
+}

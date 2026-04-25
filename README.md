@@ -11,6 +11,7 @@ A Java-based application that monitors Ethereum blockchain events in real-time, 
 - 📊 **Statistics**: Aggregate metrics about stored events
 - 🔍 **OpenAPI/Swagger**: Interactive API documentation
 - 🛡️ **Health Checks**: Liveness and readiness probes for K8s
+- 📈 **Prometheus Metrics**: Production-grade monitoring with custom metrics and Grafana dashboards
 
 ## Technology Stack
 
@@ -21,6 +22,7 @@ A Java-based application that monitors Ethereum blockchain events in real-time, 
 - **Database**: PostgreSQL 16
 - **ORM**: Spring Data JPA with Hibernate
 - **API**: Spring Web (REST)
+- **Monitoring**: Prometheus + Micrometer, Grafana
 - **Deployment**: Kubernetes
 
 ## Project Structure
@@ -31,7 +33,8 @@ event-monitor/
 │   ├── EventMonitorApplication.java   # Main application
 │   ├── config/                         # Configuration classes
 │   │   ├── Web3jConfig.java           # Web3j setup
-│   │   └── AsyncConfig.java           # Async processing
+│   │   ├── AsyncConfig.java           # Async processing
+│   │   └── MetricsConfig.java         # Prometheus metrics
 │   ├── model/
 │   │   ├── entity/
 │   │   │   └── TransferEvent.java     # JPA entity
@@ -53,7 +56,8 @@ event-monitor/
 │   ├── configmap.yml
 │   ├── secret.yml.example
 │   ├── postgres/                       # PostgreSQL setup
-│   └── app/                            # Application deployment
+│   ├── app/                            # Application deployment
+│   └── prometheus/                     # Prometheus monitoring
 ├── Dockerfile                          # Container image
 └── build.gradle.kts                   # Build configuration
 ```
@@ -139,6 +143,7 @@ java -jar build/libs/event-monitor-0.0.1-SNAPSHOT.jar
 - **API**: http://localhost:8080/api/events
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
 - **Health Check**: http://localhost:8080/health/ready
+- **Prometheus Metrics**: http://localhost:8080/actuator/prometheus
 
 ## API Endpoints
 
@@ -242,6 +247,9 @@ kubectl wait --for=condition=ready pod -l app=postgres -n event-monitor --timeou
 # Deploy application
 kubectl apply -f k8s/app/
 
+# Deploy Prometheus monitoring (optional but recommended)
+kubectl apply -f k8s/prometheus/
+
 # Optional: Deploy Ingress
 kubectl apply -f k8s/ingress.yml
 ```
@@ -312,7 +320,92 @@ Access Spring Boot Actuator endpoints:
 ```bash
 curl http://localhost:8080/actuator/health
 curl http://localhost:8080/actuator/metrics
+curl http://localhost:8080/actuator/prometheus  # Prometheus metrics
 ```
+
+## Prometheus Monitoring
+
+The application includes production-grade monitoring with Prometheus and custom metrics.
+
+### Custom Metrics
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `events_captured_total` | Counter | Total blockchain events received |
+| `events_saved_total` | Counter | Events successfully saved to database |
+| `events_duplicates_total` | Counter | Duplicate events skipped |
+| `events_errors_total` | Counter | Event processing errors |
+| `events_processing_duration_seconds` | Timer | Event processing time (histogram) |
+| `web3j_connection_status` | Gauge | WebSocket connection status (0=down, 1=up) |
+| `blockchain_current_block` | Gauge | Current blockchain block number |
+
+### Deploy Prometheus
+
+```bash
+# Deploy Prometheus to Kubernetes
+kubectl apply -f k8s/prometheus/
+
+# Verify Prometheus is running
+kubectl get pods -n event-monitor -l app=prometheus
+
+# Access Prometheus UI
+kubectl port-forward svc/prometheus-service 9090:9090 -n event-monitor
+open http://localhost:9090
+```
+
+### Example Prometheus Queries
+
+```promql
+# Total events captured
+events_captured_total
+
+# Events captured rate (per minute)
+rate(events_captured_total[1m]) * 60
+
+# Average event processing time (milliseconds)
+rate(events_processing_duration_seconds_sum[5m]) / rate(events_processing_duration_seconds_count[5m]) * 1000
+
+# 95th percentile processing time
+histogram_quantile(0.95, rate(events_processing_duration_seconds_bucket[5m]))
+
+# Success rate percentage
+(rate(events_saved_total[5m]) / rate(events_captured_total[5m])) * 100
+
+# Error rate
+rate(events_errors_total[5m])
+
+# WebSocket connection status (1=connected, 0=disconnected)
+web3j_connection_status
+
+# JVM heap memory usage percentage
+jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} * 100
+```
+
+### Grafana Dashboards
+
+Deploy Grafana for visualization:
+
+```bash
+# Deploy Grafana
+kubectl create deployment grafana --image=grafana/grafana:latest -n event-monitor
+kubectl expose deployment grafana --port=3000 --type=ClusterIP -n event-monitor
+
+# Access Grafana
+kubectl port-forward svc/grafana 3000:3000 -n event-monitor
+open http://localhost:3000
+```
+
+**Configure Grafana:**
+
+1. Login with `admin` / `admin` (change password on first login)
+2. Add Prometheus data source:
+   - URL: `http://prometheus-service:9090`
+   - Click "Save & Test"
+3. Import the pre-built dashboard:
+   - Go to Dashboards → Import
+   - Upload `k8s/prometheus/grafana-dashboard.json`
+
+See [PROMETHEUS_GUIDE.md](PROMETHEUS_GUIDE.md) for detailed setup instructions and advanced configuration.
 
 ## Database Schema
 
@@ -426,38 +519,42 @@ Use Spring Boot DevTools for hot reload during development (already included in 
 - [ ] Implement WebSocket streaming for real-time updates
 - [ ] Add Kafka for event processing pipeline
 - [ ] Implement data aggregation and analytics
-- [ ] Add Prometheus metrics and Grafana dashboards
+- [x] Add Prometheus metrics and Grafana dashboards ✅
 - [ ] Implement historical event replay
 - [ ] Support more event types (Swap, Mint, Burn, etc.)
 - [ ] Build frontend dashboard
+- [ ] Add Alertmanager for notifications
 
 ## Architecture
 
 ```
 ┌─────────────────┐
 │  Ethereum Node  │
-│  (Infura/Alchemy)│
+│ (Infura/Alchemy)│
 └────────┬────────┘
          │ WebSocket
          │
-┌────────▼────────┐
-│ Event Listener  │
-│   (Web3j)       │
-└────────┬────────┘
-         │
-         │ Parse & Save
-         │
-┌────────▼────────┐
-│   PostgreSQL    │
-│   (Events DB)   │
-└────────┬────────┘
-         │
-         │ Query
-         │
-┌────────▼────────┐
-│   REST API      │
-│ (Spring Boot)   │
-└─────────────────┘
+┌────────▼────────────────────┐
+│    Event Listener Service   │
+│         (Web3j)             │
+│  ┌──────────────────────┐   │
+│  │  Metrics Collection  │   │──────┐
+│  │   (Micrometer)       │   │      │ /actuator/prometheus
+│  └──────────────────────┘   │      │
+└────────┬────────────────────┘      │
+         │ Parse & Save              │
+         │                           │
+┌────────▼────────┐           ┌──────▼──────┐
+│   PostgreSQL    │           │ Prometheus  │
+│   (Events DB)   │           │   Server    │
+└────────┬────────┘           └──────┬──────┘
+         │                           │
+         │ Query                     │ Visualize
+         │                           │
+┌────────▼────────┐           ┌──────▼──────┐
+│   REST API      │           │   Grafana   │
+│ (Spring Boot)   │           │  Dashboard  │
+└─────────────────┘           └─────────────┘
 ```
 
 ## Contributing
@@ -492,3 +589,11 @@ For questions or issues:
 - [Ethereum JSON-RPC API](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 - [ERC20 Token Standard](https://eips.ethereum.org/EIPS/eip-20)
 - [Kubernetes Documentation](https://kubernetes.io/docs/)
+- [Prometheus Documentation](https://prometheus.io/docs/)
+- [Micrometer Documentation](https://micrometer.io/docs)
+- [Grafana Documentation](https://grafana.com/docs/)
+
+## Additional Documentation
+
+- [PROMETHEUS_GUIDE.md](PROMETHEUS_GUIDE.md) - Detailed Prometheus setup and usage guide
+- [ROADMAP.md](ROADMAP.md) - Future features and enhancements roadmap

@@ -28,6 +28,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
 
+    // Prometheus Metrics
+    implementation("io.micrometer:micrometer-registry-prometheus")
+
     // Web3j
     implementation("org.web3j:core:4.12.0")
 
