@@ -43,3 +43,13 @@ k8s/secret.yml
 
 ### macOS ###
 .DS_Store
+
+### Dashboard (Next.js) ###
+dashboard/node_modules/
+dashboard/.next/
+dashboard/coverage/
+dashboard/.env.local
+dashboard/next-env.d.ts
+
+### Heap dumps ###
+*.hprof

@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: eventmonitor
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build: .
+    ports:
+      - "30081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/eventmonitor
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      WEB3J_CLIENT_ADDRESS: ${WEB3J_CLIENT_ADDRESS:-wss://sepolia.infura.io/ws/v3/YOUR_PROJECT_ID}
+      CONTRACT_ADDRESS: ${CONTRACT_ADDRESS:-0x1234567890123456789012345678901234567890}
+      START_BLOCK: ${START_BLOCK:-latest}
+
+  dashboard:
+    build: ./dashboard
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:30081/api
+      NEXT_PUBLIC_SSE_URL: http://localhost:30081/api/events/stream
+
+volumes:
+  pgdata:

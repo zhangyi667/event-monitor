@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-monitor-dashboard
+  namespace: event-monitor
+  labels:
+    app: event-monitor-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: event-monitor-dashboard
+  template:
+    metadata:
+      labels:
+        app: event-monitor-dashboard
+    spec:
+      containers:
+      - name: dashboard
+        image: event-monitor-dashboard:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: NEXT_PUBLIC_API_URL
+          value: "http://event-monitor-service:8080"
+        - name: PORT
+          value: "3000"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      restartPolicy: Always
